@@ -1,103 +1,138 @@
-# airOS-AutoProvision (Termux & Linux Edition)
+# airOS AutoProvision
 
-![CLI Output](screenshot/output.png)
-![LiteBeam M5](screenshot/litebeem.png)
+<p align="center">
+  <img src="screenshot/litebeem.png" alt="Ubiquiti LiteBeam M5" width="420">
+</p>
 
-A Python CLI tool for provisioning and managing Ubiquiti LiteBeam M5 devices running airOS in Station mode.
+<p align="center"><strong>Automated provisioning for Ubiquiti LiteBeam M5 devices running legacy airOS.</strong></p>
 
-The tool supports Linux and non-rooted Android devices running Termux. It connects to legacy airOS firmware over SSH, performs a live wireless site survey, selects an authorized access point, prepares PPPoE/LAN settings, and writes the resulting configuration to the device's flash memory.
+<p align="center">
+  <a href="https://github.com/BilalHaiderID/airOS-AutoProvision/blob/main/LICENSE">License</a> ·
+  <a href="https://github.com/BilalHaiderID/airOS-AutoProvision/issues">Issues</a>
+</p>
 
-> **Authorization required:** Use this project only with Ubiquiti devices and networks that you own or are explicitly authorized to administer.
+`airOS AutoProvision` is a lightweight Python command-line utility for authorized network administrators who need to provision Ubiquiti LiteBeam M5 devices in Station mode. It combines legacy SSH/SCP compatibility, wireless site surveying, configuration templating, PPPoE setup, LAN/DHCP configuration, and flash deployment into one guided workflow.
 
-## 🚀 Features
+> **Important:** This project changes network access, wireless credentials, PPPoE settings, and device configuration. Use it only on equipment and networks that you own or are explicitly authorized to manage.
 
-- **Termux and non-rooted Android support** — calculates the temporary subnet configuration and guides you through manually assigning a static IP on Android when root access is unavailable.
-- **Smart site survey** — runs `iwlist ath0 scan` on the device, matches detected networks against an authorized AP list, and selects the strongest matching signal.
-- **Dynamic LAN and DHCP configuration** — accepts a target `--lan-ip` and derives the device network settings and DHCP range.
-- **Legacy SSH/SCP compatibility** — uses the system's native `ssh` and `scp` commands with `sshpass`, legacy SCP mode, and `ssh-rsa` compatibility options required by older airOS firmware.
-- **PPPoE and credential injection** — updates PPPoE credentials, hostname, wireless settings, and LAN configuration in the generated airOS payload.
-- **Flash deployment and restart** — uploads the payload, commits it with `/sbin/cfgmtd`, and restarts the device to apply the configuration.
+## Overview
 
-## 📁 Project Structure
+The tool is designed for airOS firmware that requires older SSH algorithms and traditional SCP behavior. It uses the operating system's native `ssh`, `scp`, and `sshpass` commands rather than a third-party Python SSH library.
 
-```text
-airOS-AutoProvision/
-├── config/
-│   └── ap_list.json         # Authorized access points and WPA keys
-├── screenshot/
-│   ├── litebeem.png         # Hardware reference photo
-│   └── output.png           # CLI execution screenshot
-├── LICENSE                  # Project license
-├── README.md                # Project documentation
-├── XW-B4FBE46CFAEF.cfg      # Base airOS configuration template
-├── main.py                  # CLI entry point
-└── requirements.txt         # Python dependencies, if applicable
-```
+It can be run from a normal Linux workstation or from Termux on a non-rooted Android phone. The Termux workflow pauses while you temporarily assign a static IP to the phone through Android Wi-Fi settings.
 
-## 🛠️ Prerequisites
+![CLI output](screenshot/output.png)
 
-The tool relies on native SSH utilities because legacy airOS firmware may not work with current Paramiko or OpenSSH defaults.
+## Features
 
-### Termux on Android
+- **Guided Termux workflow** for non-rooted Android devices.
+- **Legacy airOS SSH compatibility** using `ssh-rsa` options and disabled host-key prompts for first-time device access.
+- **Automated wireless survey** using `iwlist ath0 scan` on the LiteBeam.
+- **Authorized AP matching** from a local JSON file, with strongest-signal selection.
+- **Configuration templating** for PPPoE credentials, hostname, wireless SSID/password, LAN address, netmask, and DHCP range.
+- **Flash deployment** through `/sbin/cfgmtd` followed by an airOS soft restart.
+- **Temporary payload cleanup** after the provisioning workflow completes.
+- **No Python packages required** — the script uses only Python's standard library and system utilities.
+
+## Requirements
+
+### Hardware and firmware
+
+- Ubiquiti LiteBeam M5 or compatible airOS device.
+- SSH access to the device.
+- A base airOS configuration template compatible with the target firmware.
+- An authorized wireless network within range of the device.
+
+### Host software
+
+- Python 3.8 or newer.
+- `sshpass`.
+- OpenSSH client (`ssh` and `scp`).
+- A network connection to the device.
+
+Install the required system tools as follows.
+
+#### Termux
 
 ```bash
 pkg update
-pkg install openssh sshpass python
+pkg install python openssh sshpass
 ```
 
-### Arch Linux
-
-```bash
-sudo pacman -S openssh sshpass python
-```
-
-### Ubuntu/Debian
+#### Debian or Ubuntu
 
 ```bash
 sudo apt update
-sudo apt install openssh-client sshpass python3
+sudo apt install python3 openssh-client sshpass
 ```
 
-If the project declares Python dependencies, install them with:
+#### Arch Linux
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+sudo pacman -S python openssh sshpass
 ```
 
-## ⚙️ Configure the Authorized AP List
+No `pip install` step is required.
 
-Create or edit `config/ap_list.json` with the wireless networks the LiteBeam is allowed to use:
+## Installation
+
+Clone the repository and enter its directory:
+
+```bash
+git clone https://github.com/BilalHaiderID/airOS-AutoProvision.git
+cd airOS-AutoProvision
+```
+
+Verify the command-line interface:
+
+```bash
+python3 main.py --help
+```
+
+## Configuration
+
+### Authorized AP list
+
+Create or edit `config/ap_list.json`. Only networks listed in this file can be selected during the site survey.
 
 ```json
 [
   {
-    "ssid": "Your AP Name",
-    "password": "your_wifi_password_here"
+    "ssid": "Your authorized AP",
+    "password": "your_wifi_password"
   },
   {
-    "ssid": "Another AP Name",
-    "password": "another_wifi_password_here"
+    "ssid": "Backup authorized AP",
+    "password": "another_wifi_password"
   }
 ]
 ```
 
-The script scans nearby networks, filters results against this list, and chooses the strongest authorized match.
+The matching is based on the exact SSID. If more than one authorized AP is detected, the script selects the one with the strongest signal.
 
-### Protect credentials
+### Configuration template
 
-Do not commit real Wi-Fi passwords, PPPoE credentials, or production configuration files to Git. Use a local configuration file, environment-specific secrets, or a private fork as appropriate for your deployment.
+`XW-B4FBE46CFAEF.cfg` is used as the base template. The script updates matching airOS keys for:
 
-## 💻 Usage
+- PPPoE username and password
+- Device hostname
+- Station SSID and WPA credentials
+- LAN IP address and netmask
+- DHCP start and end addresses
 
-For a factory-reset or new device, the commonly used default connection details are:
+Keep a backup of any production configuration before applying changes.
 
-- IP address: `192.168.1.20`
-- Username: `ubnt`
-- Password: `ubnt`
+## Usage
 
-Run the provisioning command with the device's current credentials and desired network settings:
+For a factory-reset device, the commonly used default values are:
+
+| Setting | Typical default |
+| --- | --- |
+| Device IP | `192.168.1.20` |
+| SSH username | `ubnt` |
+| SSH password | `ubnt` |
+
+Run the tool with your authorized credentials and deployment values:
 
 ```bash
 python3 main.py \
@@ -106,64 +141,127 @@ python3 main.py \
   --ssh-pass ubnt \
   --pppoe-user "your_pppoe_username" \
   --pppoe-pass "your_pppoe_password" \
-  --lan-ip "192.168.5.17" \
+  --lan-ip 192.168.5.17 \
   --dev-name "LiteBeam M5" \
   --ap-list config/ap_list.json \
   --config XW-B4FBE46CFAEF.cfg
 ```
 
-> Replace all example credentials and IP addresses with values appropriate for your authorized deployment.
+> Do not copy real passwords into shell history or commit them to the repository. Replace all example values before running the command.
 
-## 📱 Termux Workflow
+## Termux workflow
 
-On a non-rooted Android device, Termux cannot directly change the Wi-Fi interface address. The tool therefore pauses and guides you through the process:
+On a non-rooted Android phone, the script cannot change the Wi-Fi interface address itself.
 
-1. The script calculates the temporary IP address required by the phone.
-2. Open Android Wi-Fi settings and assign that static IP to the connected Wi-Fi network.
-3. Return to Termux and press **Enter** to continue.
-4. The tool connects to the LiteBeam, performs the survey, updates the configuration, and flashes it.
-5. After provisioning completes, restore the Android Wi-Fi configuration to **DHCP**.
+1. Start the command from Termux.
+2. When prompted, open Android Wi-Fi settings.
+3. Change the connected network's IP setting to **Static**.
+4. Enter the temporary IP shown by the script, typically an unused address in the device's current subnet.
+5. Return to Termux and press **Enter**.
+6. Allow the script to complete the survey, configuration, flash write, and restart.
+7. Change the phone's Wi-Fi setting back to **DHCP**.
 
-## 🧰 Command-Line Arguments
+The device will normally become available at the new value supplied to `--lan-ip` after reboot.
 
-| Argument | Description | Default |
-| --- | --- | --- |
-| `--device-ip` | Current IP address of the LiteBeam | `192.168.1.20` |
-| `--ssh-user` | Current SSH username | `ubnt` |
-| `--ssh-pass` | Current SSH password | `ubnt` |
-| `--pppoe-user` | PPPoE username to inject | Required |
-| `--pppoe-pass` | PPPoE password to inject | Required |
-| `--lan-ip` | Static LAN IP to assign to the device | Required |
-| `--dev-name` | New hostname for the device | Required |
-| `--ap-list` | Authorized AP list file | `config/ap_list.json` |
-| `--config` | Base airOS configuration template | `XW-B4FBE46CFAEF.cfg` |
+## Command-line reference
 
-For the authoritative list of options supported by the current implementation, run:
+| Option | Required | Default | Description |
+| --- | :---: | --- | --- |
+| `--device-ip` | No | `192.168.1.20` | Current IP address of the device. |
+| `--ssh-user` | No | `ubnt` | Current SSH username. |
+| `--ssh-pass` | No | `ubnt` | Current SSH password. |
+| `--pppoe-user` | Yes | — | PPPoE username to write to the configuration. |
+| `--pppoe-pass` | Yes | — | PPPoE password to write to the configuration. |
+| `--lan-ip` | Yes | — | New device LAN IP address. |
+| `--dev-name` | Yes | — | New device hostname. |
+| `--ap-list` | No | `config/ap_list.json` | Authorized AP JSON file. |
+| `--config` | No | `XW-B4FBE46CFAEF.cfg` | Base configuration template. |
+
+The implementation's current argument list is always available with:
 
 ```bash
 python3 main.py --help
 ```
 
-## 🔍 How It Works
+## Provisioning flow
 
-1. Connects to the LiteBeam using SSH and legacy compatibility settings.
-2. Runs a wireless scan on `ath0`.
-3. Matches discovered SSIDs against `config/ap_list.json`.
-4. Selects the strongest authorized access point.
-5. Updates the base configuration with wireless, PPPoE, hostname, LAN, and DHCP values.
-6. Uploads the generated payload to the device.
-7. Commits the configuration to flash using `/sbin/cfgmtd`.
-8. Restarts the device so the new settings take effect.
+1. Calculates the target subnet and DHCP range.
+2. Displays the temporary Android network instructions.
+3. Verifies SSH connectivity.
+4. Loads the authorized AP list.
+5. Runs `iwlist ath0 scan` on the LiteBeam.
+6. Selects the strongest matching authorized AP.
+7. Generates a temporary customized configuration.
+8. Uploads it to `/tmp/system.cfg` using legacy SCP mode.
+9. Commits the configuration with `/sbin/cfgmtd`.
+10. Performs a soft restart and removes the local temporary payload.
 
-## ⚠️ Safety Notes
+## Troubleshooting
 
-- Confirm the target IP and credentials before starting.
-- The device may become reachable at its new LAN IP after provisioning.
-- A wrong LAN address or subnet can temporarily make the device inaccessible.
-- Back up the existing device configuration before applying changes in production.
-- Never use this tool to access or reconfigure equipment without permission.
-- Keep secrets out of source control and command history where possible.
+### `sshpass` is not installed
 
-## 📄 License
+Install `sshpass` using the platform-specific command in the Requirements section, then confirm it is available:
 
-See [LICENSE](LICENSE) for the applicable license terms.
+```bash
+sshpass -V
+```
+
+### SSH connection fails
+
+- Confirm the device is powered and connected to the same network.
+- Verify the temporary static IP on Android or the host interface.
+- Check `--device-ip`, `--ssh-user`, and `--ssh-pass`.
+- Confirm that SSH is enabled on the device.
+
+### No authorized AP is found
+
+- Confirm the SSID is spelled exactly as it appears in the scan.
+- Check that the AP is in range.
+- Verify `config/ap_list.json` contains valid JSON and the correct password.
+- Make sure the device's wireless interface is `ath0` on the installed firmware.
+
+### The device is unreachable after reboot
+
+Wait for the restart to finish, then connect using the new `--lan-ip`. If necessary, restore the previous configuration or perform a manufacturer-supported recovery procedure.
+
+## Security guidance
+
+- Treat `config/ap_list.json` and configuration templates as sensitive when they contain real credentials.
+- Prefer a local, untracked credentials file for production deployments.
+- Avoid passing secrets directly on the command line when shell history is shared.
+- Do not disable network security controls on systems you do not administer.
+- Review the generated configuration before flashing a production device.
+
+## Project structure
+
+```text
+airOS-AutoProvision/
+├── config/
+│   └── ap_list.json         # Authorized AP definitions
+├── screenshot/
+│   ├── litebeem.png         # Hardware reference image
+│   └── output.png           # Example CLI output
+├── LICENSE                  # License terms
+├── README.md                # Documentation
+├── XW-B4FBE46CFAEF.cfg      # Base airOS configuration template
+└── main.py                  # Provisioning CLI
+```
+
+## Contributing
+
+Bug reports, documentation improvements, and compatibility fixes are welcome. When opening an issue, include:
+
+- Host operating system and Python version
+- airOS/device model and firmware version
+- The command options used, with credentials removed
+- Relevant error output and reproduction steps
+
+Never include passwords, private keys, or production network details in issues or pull requests.
+
+## License
+
+See [LICENSE](LICENSE) for the license applicable to this project.
+
+## Disclaimer
+
+This project is provided as-is for authorized administration and educational purposes. The maintainers are not responsible for device outages, configuration loss, credential exposure, or network disruption resulting from its use. Always test on non-production equipment first.
